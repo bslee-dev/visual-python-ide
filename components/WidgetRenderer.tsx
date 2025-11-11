@@ -35,7 +35,10 @@ export const WidgetRenderer: React.FC<WidgetRendererProps> = ({
     return (
       <div 
         className="px-2 py-1 text-sm flex items-center h-full"
-        style={baseStyle}
+        style={{
+          ...baseStyle,
+          justifyContent: widget.textAlign === 'center' ? 'center' : widget.textAlign === 'right' ? 'flex-end' : 'flex-start',
+        }}
       >
         {defaultRuntimeValue.text}
       </div>
@@ -46,8 +49,11 @@ export const WidgetRenderer: React.FC<WidgetRendererProps> = ({
     return (
       <button 
         onClick={() => !isDesignMode && onEvent?.(widget)}
-        className={`w-full h-full border-2 border-gray-400 shadow-sm hover:brightness-95 ${isDesignMode ? 'pointer-events-none' : 'cursor-pointer'}`}
-        style={baseStyle}
+        className={`w-full h-full border-2 border-gray-400 shadow-sm hover:brightness-95 flex items-center ${isDesignMode ? 'pointer-events-none' : 'cursor-pointer'}`}
+        style={{
+          ...baseStyle,
+          justifyContent: widget.textAlign === 'center' ? 'center' : widget.textAlign === 'right' ? 'flex-end' : 'flex-start',
+        }}
         disabled={isDesignMode}
       >
         {defaultRuntimeValue.text}
@@ -151,12 +157,19 @@ export const WidgetRenderer: React.FC<WidgetRendererProps> = ({
     return (
       <select 
         multiple 
+        value={widget.selectedIndex !== undefined && widget.selectedIndex >= 0 ? [String(widget.selectedIndex)] : []}
+        onChange={(e) => {
+          if (!isDesignMode && onPropertyChange) {
+            const selectedIdx = e.target.selectedIndex >= 0 ? e.target.selectedIndex : -1;
+            onPropertyChange(widget.name, 'selectedIndex', selectedIdx);
+          }
+        }}
         className={`w-full h-full border-2 border-gray-400 p-1 ${isDesignMode ? 'pointer-events-none' : ''}`}
         style={baseStyle}
         disabled={isDesignMode}
       >
-        {(widget.items || ['Item 1', 'Item 2', 'Item 3']).map((item, idx) => (
-          <option key={idx}>{item}</option>
+        {(widget.items || []).map((item, idx) => (
+          <option key={idx} value={String(idx)}>{item}</option>
         ))}
       </select>
     );

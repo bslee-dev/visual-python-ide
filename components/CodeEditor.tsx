@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Play, Save, X, Code, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { X, Code, AlertCircle, CheckCircle } from 'lucide-react';
 import { Widget } from '../types/widget';
 
 interface CodeEditorProps {
@@ -7,7 +7,7 @@ interface CodeEditorProps {
   code: string;
   darkMode: boolean;
   onCodeChange: (code: string) => void;
-  onSave: () => void;
+  onSave: (code?: string) => void;
   onClose: () => void;
   onRun?: () => void;
 }
@@ -33,7 +33,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const monacoEditorRef = useRef<any>(null);
   const [isMonacoLoaded, setIsMonacoLoaded] = useState(false);
   const [errors, setErrors] = useState<Array<{ line: number; message: string }>>([]);
-  const [showHelp, setShowHelp] = useState(false);
 
   // Monaco Editor 로드
   useEffect(() => {
@@ -212,7 +211,18 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
     // Ctrl+S로 저장
     editor.addCommand(window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyS, () => {
-      onSave();
+      const currentCode = editor.getValue();
+      onCodeChange(currentCode);
+      onSave(currentCode);
+    });
+
+    // Esc 키로 저장 후 닫기
+    editor.addCommand(window.monaco.KeyCode.Escape, () => {
+      // 최신 코드를 직접 전달하여 저장
+      const currentCode = editor.getValue();
+      console.log('Esc 키 눌림, 코드 저장 시도:', currentCode.substring(0, 50));
+      onCodeChange(currentCode);
+      onSave(currentCode);
     });
 
     // Ctrl+Enter로 실행
@@ -297,16 +307,17 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   const bgColor = darkMode ? 'bg-gray-900' : 'bg-white';
   const textColor = darkMode ? 'text-white' : 'text-gray-900';
+  const headerTextColor = darkMode ? 'text-white' : 'text-gray-900'; // 화이트모드에서 더 진한 색상
   const borderColor = darkMode ? 'border-gray-700' : 'border-gray-300';
 
   return (
-    <div className={`fixed inset-0 ${bgColor} z-50 flex flex-col`}>
+    <div className={`fixed inset-0 ${bgColor} z-[9999] flex flex-col`} style={{ isolation: 'isolate' }}>
       {/* 헤더 */}
       <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
         <div className="flex items-center gap-3">
-          <Code size={20} />
+          <Code size={20} className={headerTextColor} />
           <div>
-            <h2 className={`font-bold ${textColor}`}>
+            <h2 className={`font-bold ${headerTextColor}`}>
               {widget ? `${widget.name} - 이벤트 코드` : '코드 편집기'}
             </h2>
             {widget && (
@@ -319,41 +330,24 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowHelp(!showHelp)}
-            className={`px-3 py-1.5 rounded flex items-center gap-2 text-sm ${
-              darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
+            onClick={() => {
+              // 최신 코드를 저장 (handleCodeEditorSave가 이미 닫기까지 처리함)
+              if (monacoEditorRef.current) {
+                const currentCode = monacoEditorRef.current.getValue();
+                onCodeChange(currentCode);
+                onSave(currentCode);
+              } else {
+                onSave();
+              }
+            }}
+            className={`p-1.5 rounded ${
+              darkMode 
+                ? 'hover:bg-gray-700 text-white' 
+                : 'hover:bg-gray-200 text-gray-900 bg-gray-100'
             }`}
-          >
-            <Info size={16} />
-            도움말
-          </button>
-
-          {onRun && (
-            <button
-              onClick={onRun}
-              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-2 text-sm"
-              title="Ctrl+Enter"
-            >
-              <Play size={16} />
-              실행
-            </button>
-          )}
-
-          <button
-            onClick={onSave}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center gap-2 text-sm"
-            title="Ctrl+S"
-          >
-            <Save size={16} />
-            저장
-          </button>
-
-          <button
-            onClick={onClose}
-            className={`p-1.5 rounded hover:bg-gray-200 ${darkMode ? 'hover:bg-gray-700' : ''}`}
             title="Esc"
           >
-            <X size={20} />
+            <X size={20} className={darkMode ? 'text-white' : 'text-gray-900'} />
           </button>
         </div>
       </div>
@@ -400,87 +394,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             </div>
           )}
         </div>
-
-        {/* 도움말 패널 */}
-        {showHelp && (
-          <div className={`w-80 border-l ${borderColor} p-4 overflow-y-auto`}>
-            <h3 className="font-bold mb-3 flex items-center gap-2">
-              <Info size={18} />
-              API 참조
-            </h3>
-
-            <div className="space-y-4 text-sm">
-              <div>
-                <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-1">
-                  setWidget(위젯이름, 속성, 값)
-                </h4>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                  위젯의 속성을 변경합니다
-                </p>
-                <pre className={`text-xs p-2 rounded ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-{`setWidget("label1", "text", "안녕")
-setWidget("textbox1", "value", "텍스트")
-setWidget("button1", "bgColor", "#ff0000")`}
-                </pre>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-1">
-                  getWidget(위젯이름, 속성)
-                </h4>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                  위젯의 속성 값을 가져옵니다
-                </p>
-                <pre className={`text-xs p-2 rounded ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-{`value = getWidget("textbox1", "value")
-text = getWidget("label1", "text")
-checked = getWidget("checkbox1", "checked")`}
-                </pre>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-1">
-                  msgBox(메시지, 제목, 타입)
-                </h4>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                  메시지 박스를 표시합니다
-                </p>
-                <pre className={`text-xs p-2 rounded ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-{`msgBox("안녕하세요!", "인사", "info")
-msgBox("주의하세요", "경고", "warning")
-msgBox("에러 발생", "오류", "error")
-msgBox("계속할까요?", "확인", "question")`}
-                </pre>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-1">
-                  사용 가능한 속성
-                </h4>
-                <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
-                  <li>• <code>text</code> - 텍스트</li>
-                  <li>• <code>value</code> - 값 (textbox, slider)</li>
-                  <li>• <code>checked</code> - 체크 상태</li>
-                  <li>• <code>bgColor</code> - 배경색</li>
-                  <li>• <code>textColor</code> - 텍스트 색상</li>
-                  <li>• <code>fontSize</code> - 글자 크기</li>
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-1">
-                  단축키
-                </h4>
-                <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
-                  <li>• <kbd>Ctrl+S</kbd> - 저장</li>
-                  <li>• <kbd>Ctrl+Enter</kbd> - 실행</li>
-                  <li>• <kbd>Ctrl+Space</kbd> - 자동완성</li>
-                  <li>• <kbd>F1</kbd> - 명령 팔레트</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

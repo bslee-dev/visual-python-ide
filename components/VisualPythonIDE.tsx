@@ -1,9 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Code, Play, Trash2, Copy, Download, Grip, Save, FolderOpen, Undo, Redo, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Layers, X, Moon, Sun, Zap, FileText, Terminal, AlertCircle, Info, AlertTriangle, HelpCircle } from 'lucide-react';
-import { Widget, WidgetType, RuntimeValue, MsgBox, ConsoleLog, Project } from '../types/widget';
+import { 
+  Code, Play, Trash2, Copy, Download, Grip, Save, FolderOpen, Undo, Redo, 
+  AlignLeft, AlignCenter, AlignRight, Bold, Italic, Layers, X, Moon, Sun, 
+  Zap, FileText, Terminal, AlertCircle, Info, AlertTriangle, HelpCircle 
+} from 'lucide-react';
+import { Widget, WidgetType, Project } from '../types/widget';
 import { TOOLBOX_ITEMS, TEMPLATES, CODE_SNIPPETS, COLOR_PRESETS, GRID_SIZE } from '../constants';
+import { DEFAULT_FORM_TITLE, DEFAULT_FORM_SIZE, DEFAULT_GRID_ENABLED, DEFAULT_SNAP_TO_GRID } from '../constants/defaults';
 import { snapToGrid as snapToGridUtil, createWidget, generatePythonCode, downloadFile } from '../utils/helpers';
+import { getTemplateEventCode } from '../utils/templateEvents';
 import { useHistory } from '../hooks/useHistory';
+import { useRuntime } from '../hooks/useRuntime';
+import { useCodeExecution } from '../hooks/useCodeExecution';
 import { Toolbox } from './Toolbox';
 import { WidgetRenderer } from './WidgetRenderer';
 import { CodeEditor } from './CodeEditor';
@@ -13,30 +21,47 @@ export default function VisualPythonIDE() {
   const [selectedWidget, setSelectedWidget] = useState<number | null>(null);
   const [draggedType, setDraggedType] = useState<WidgetType | null>(null);
   const [showCode, setShowCode] = useState(false);
-  const [formTitle, setFormTitle] = useState('Form1');
-  const [formSize, setFormSize] = useState({ width: 600, height: 400 });
+  const [formTitle, setFormTitle] = useState(DEFAULT_FORM_TITLE);
+  const [formSize, setFormSize] = useState(DEFAULT_FORM_SIZE);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [isFormResizing, setIsFormResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ mouseX: 0, mouseY: 0, x: 0, y: 0, width: 0, height: 0 });
-  const [gridEnabled, setGridEnabled] = useState(true);
-  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [formResizeStart, setFormResizeStart] = useState({ mouseX: 0, mouseY: 0, width: 0, height: 0 });
+  const [gridEnabled, setGridEnabled] = useState(DEFAULT_GRID_ENABLED);
+  const [snapToGrid, setSnapToGrid] = useState(DEFAULT_SNAP_TO_GRID);
   const [showLayerPanel, setShowLayerPanel] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null);
   const [widgetCode, setWidgetCode] = useState('');
   const [showCodeEditor, setShowCodeEditor] = useState(false);
-  const [runtimeValues, setRuntimeValues] = useState<Record<string, RuntimeValue>>({});
   const [darkMode, setDarkMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showSnippets, setShowSnippets] = useState(false);
-  const [consoleOutput, setConsoleOutput] = useState<ConsoleLog[]>([]);
-  const [msgBoxQueue, setMsgBoxQueue] = useState<MsgBox[]>([]);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const { addToHistory, undo, redo, canUndo, canRedo, resetHistory } = useHistory();
+  
+  // 실행 모드 관련 훅
+  const {
+    isRunning,
+    runtimeValues,
+    consoleOutput,
+    msgBoxQueue,
+    initializeRuntime,
+    stopRuntime,
+    addConsoleLog,
+    closeMsgBox,
+    showMsgBox,
+    setRuntimeValues,
+    setConsoleOutput,
+    setMsgBoxQueue,
+  } = useRuntime();
 
+  /**
+   * 그리드에 맞춰 값 스냅
+   */
   const snapToGridFunc = (value: number) => {
     return snapToGridUtil(value, GRID_SIZE, snapToGrid);
   };
@@ -57,8 +82,40 @@ export default function VisualPythonIDE() {
     }
   };
 
+  // 인쇄 방지 전역 설정
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    // window.print 오버라이드
+    const originalPrint = window.print;
+    window.print = () => {
+      console.log('인쇄 시도가 차단되었습니다.');
+      return;
+    };
+
+    // beforeprint 이벤트 차단
+    const handleBeforePrint = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
+    window.addEventListener('beforeprint', handleBeforePrint, true);
+    
+    return () => {
+      window.print = originalPrint;
+      window.removeEventListener('beforeprint', handleBeforePrint, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+P (인쇄) 방지
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+        return false;
+      }
+      
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
         handleUndo();
@@ -75,9 +132,17 @@ export default function VisualPythonIDE() {
         e.preventDefault();
         duplicateWidget();
       }
-      if (e.key === 'Escape' && showCodeEditor) {
-        e.preventDefault();
-        setShowCodeEditor(false);
+      if (e.key === 'Escape') {
+        // 코드 편집기가 열려있을 때는 Monaco Editor가 처리하도록 함
+        if (showCodeEditor) {
+          // Monaco Editor의 Esc 키 커맨드가 먼저 실행되도록 함
+          // 여기서는 아무것도 하지 않음
+          return;
+        } else {
+          e.preventDefault();
+          // Esc 키로 폼 선택
+          setSelectedWidget(null);
+        }
       }
       if (selectedWidget && !showCodeEditor && !isResizing) {
         const widget = widgets.find(w => w.id === selectedWidget);
@@ -102,9 +167,165 @@ export default function VisualPythonIDE() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // capture phase에서도 등록하여 브라우저 기본 동작을 더 확실하게 막음
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [selectedWidget, widgets, showCodeEditor, isResizing]);
+
+  // 전역 마우스 이벤트로 부드러운 리사이즈 및 드래그 지원
+  useEffect(() => {
+    if (!isDragging && !isResizing && !isFormResizing) return;
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (isFormResizing && resizeHandle && canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        const deltaX = mouseX - formResizeStart.mouseX;
+        const deltaY = mouseY - formResizeStart.mouseY;
+        
+        let newWidth = formResizeStart.width;
+        let newHeight = formResizeStart.height;
+        
+        switch(resizeHandle) {
+          case 'nw':
+            newWidth = Math.max(200, formResizeStart.width - deltaX);
+            newHeight = Math.max(150, formResizeStart.height - deltaY);
+            break;
+          case 'n':
+            newHeight = Math.max(150, formResizeStart.height - deltaY);
+            break;
+          case 'ne':
+            newWidth = Math.max(200, formResizeStart.width + deltaX);
+            newHeight = Math.max(150, formResizeStart.height - deltaY);
+            break;
+          case 'e':
+            newWidth = Math.max(200, formResizeStart.width + deltaX);
+            break;
+          case 'se':
+            newWidth = Math.max(200, formResizeStart.width + deltaX);
+            newHeight = Math.max(150, formResizeStart.height + deltaY);
+            break;
+          case 's':
+            newHeight = Math.max(150, formResizeStart.height + deltaY);
+            break;
+          case 'sw':
+            newWidth = Math.max(200, formResizeStart.width - deltaX);
+            newHeight = Math.max(150, formResizeStart.height + deltaY);
+            break;
+          case 'w':
+            newWidth = Math.max(200, formResizeStart.width - deltaX);
+            break;
+        }
+
+        const snapToGridFunc = (val: number) => snapToGridUtil(val, GRID_SIZE, snapToGrid);
+        newWidth = snapToGridFunc(newWidth);
+        newHeight = snapToGridFunc(newHeight);
+
+        setFormSize({ width: newWidth, height: newHeight });
+      }
+
+      if (isResizing && selectedWidget && resizeHandle && canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        const deltaX = mouseX - resizeStart.mouseX;
+        const deltaY = mouseY - resizeStart.mouseY;
+        
+        let newX = resizeStart.x;
+        let newY = resizeStart.y;
+        let newWidth = resizeStart.width;
+        let newHeight = resizeStart.height;
+        
+        switch(resizeHandle) {
+          case 'nw':
+            newX = resizeStart.x + deltaX;
+            newY = resizeStart.y + deltaY;
+            newWidth = resizeStart.width - deltaX;
+            newHeight = resizeStart.height - deltaY;
+            break;
+          case 'n':
+            newY = resizeStart.y + deltaY;
+            newHeight = resizeStart.height - deltaY;
+            break;
+          case 'ne':
+            newY = resizeStart.y + deltaY;
+            newWidth = resizeStart.width + deltaX;
+            newHeight = resizeStart.height - deltaY;
+            break;
+          case 'e':
+            newWidth = resizeStart.width + deltaX;
+            break;
+          case 'se':
+            newWidth = resizeStart.width + deltaX;
+            newHeight = resizeStart.height + deltaY;
+            break;
+          case 's':
+            newHeight = resizeStart.height + deltaY;
+            break;
+          case 'sw':
+            newX = resizeStart.x + deltaX;
+            newWidth = resizeStart.width - deltaX;
+            newHeight = resizeStart.height + deltaY;
+            break;
+          case 'w':
+            newX = resizeStart.x + deltaX;
+            newWidth = resizeStart.width - deltaX;
+            break;
+        }
+
+        const snapToGridFunc = (val: number) => snapToGridUtil(val, GRID_SIZE, snapToGrid);
+        newWidth = Math.max(20, snapToGridFunc(newWidth));
+        newHeight = Math.max(20, snapToGridFunc(newHeight));
+        newX = snapToGridFunc(newX);
+        newY = snapToGridFunc(newY);
+
+        const newWidgets = widgets.map(w =>
+          w.id === selectedWidget ? { ...w, x: newX, y: newY, width: newWidth, height: newHeight } : w
+        );
+        setWidgets(newWidgets);
+      }
+
+      if (isDragging && selectedWidget && canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const snapToGridFunc = (val: number) => snapToGridUtil(val, GRID_SIZE, snapToGrid);
+        const newX = snapToGridFunc(Math.max(0, mouseX - dragOffset.x));
+        const newY = snapToGridFunc(Math.max(0, mouseY - dragOffset.y));
+
+        const newWidgets = widgets.map(w =>
+          w.id === selectedWidget ? { ...w, x: newX, y: newY } : w
+        );
+        setWidgets(newWidgets);
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (isDragging || isResizing || isFormResizing) {
+        if (isFormResizing) {
+          addToHistory(widgets);
+        } else {
+          addToHistory(widgets);
+        }
+      }
+      setIsDragging(false);
+      setIsResizing(false);
+      setIsFormResizing(false);
+      setResizeHandle(null);
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isDragging, isResizing, isFormResizing, selectedWidget, resizeHandle, formResizeStart, resizeStart, dragOffset, widgets, snapToGrid, addToHistory]);
 
   const handleDragStart = (type: WidgetType) => {
     setDraggedType(type);
@@ -143,6 +364,38 @@ export default function VisualPythonIDE() {
     });
   };
 
+  const handleFormResizeStart = (e: React.MouseEvent, handle: string) => {
+    e.stopPropagation();
+    setIsFormResizing(true);
+    setResizeHandle(handle);
+    setSelectedWidget(null); // 폼 선택 시 위젯 선택 해제
+    
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      setFormResizeStart({
+        mouseX: e.clientX - rect.left,
+        mouseY: e.clientY - rect.top,
+        width: formSize.width,
+        height: formSize.height,
+      });
+    }
+  };
+
+  const handleFormClick = (e: React.MouseEvent) => {
+    // 위젯 클릭 핸들러에서 stopPropagation을 호출하므로,
+    // 이 핸들러가 실행된다는 것은 위젯이 아닌 곳을 클릭했다는 의미입니다.
+    
+    const target = e.target as HTMLElement;
+    
+    // 리사이즈 핸들을 클릭한 경우 제외
+    if (target.classList.contains('resize-handle') || target.closest('.resize-handle')) {
+      return;
+    }
+    
+    // 폼 선택
+    setSelectedWidget(null);
+  };
+
   const handleWidgetClick = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isDragging && !isResizing) {
@@ -167,10 +420,23 @@ print("${widget.text} clicked!")`;
     setShowCodeEditor(true);
   };
 
-  const handleCodeEditorSave = () => {
+  const handleCodeEditorSave = (code?: string) => {
     if (editingWidget) {
+      const codeToSave = code !== undefined ? code : widgetCode;
+      console.log('저장 시도:', { 
+        editingWidget: editingWidget.name, 
+        codeProvided: code !== undefined,
+        codeLength: codeToSave?.length || 0,
+        codePreview: codeToSave?.substring(0, 50) || ''
+      });
+      
+      // widgetCode 상태도 업데이트 (다음에 열 때를 위해)
+      if (code !== undefined) {
+        setWidgetCode(code);
+      }
+      
       const newWidgets = widgets.map(w =>
-        w.id === editingWidget.id ? { ...w, eventCode: widgetCode } : w
+        w.id === editingWidget.id ? { ...w, eventCode: codeToSave } : w
       );
       setWidgets(newWidgets);
       addToHistory(newWidgets);
@@ -181,6 +447,15 @@ print("${widget.text} clicked!")`;
   };
 
   const handleCodeEditorClose = () => {
+    // 닫기 전에 자동 저장
+    if (editingWidget) {
+      const newWidgets = widgets.map(w =>
+        w.id === editingWidget.id ? { ...w, eventCode: widgetCode } : w
+      );
+      setWidgets(newWidgets);
+      addToHistory(newWidgets);
+      addConsoleLog('log', `코드가 ${editingWidget.name}에 저장되었습니다`);
+    }
     setShowCodeEditor(false);
     setEditingWidget(null);
   };
@@ -199,97 +474,43 @@ print("${widget.text} clicked!")`;
     setIsDragging(true);
     
     const widget = widgets.find(w => w.id === id);
-    const rect = canvasRef.current.getBoundingClientRect();
+    if (!widget) return;
+    
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
     setDragOffset({
       x: e.clientX - rect.left - widget.x,
       y: e.clientY - rect.top - widget.y,
     });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isResizing && selectedWidget && resizeHandle) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      
-      const deltaX = mouseX - resizeStart.mouseX;
-      const deltaY = mouseY - resizeStart.mouseY;
-      
-      let newX = resizeStart.x;
-      let newY = resizeStart.y;
-      let newWidth = resizeStart.width;
-      let newHeight = resizeStart.height;
-      
-      switch(resizeHandle) {
-        case 'nw':
-          newX = resizeStart.x + deltaX;
-          newY = resizeStart.y + deltaY;
-          newWidth = resizeStart.width - deltaX;
-          newHeight = resizeStart.height - deltaY;
-          break;
-        case 'n':
-          newY = resizeStart.y + deltaY;
-          newHeight = resizeStart.height - deltaY;
-          break;
-        case 'ne':
-          newY = resizeStart.y + deltaY;
-          newWidth = resizeStart.width + deltaX;
-          newHeight = resizeStart.height - deltaY;
-          break;
-        case 'e':
-          newWidth = resizeStart.width + deltaX;
-          break;
-        case 'se':
-          newWidth = resizeStart.width + deltaX;
-          newHeight = resizeStart.height + deltaY;
-          break;
-        case 's':
-          newHeight = resizeStart.height + deltaY;
-          break;
-        case 'sw':
-          newX = resizeStart.x + deltaX;
-          newWidth = resizeStart.width - deltaX;
-          newHeight = resizeStart.height + deltaY;
-          break;
-        case 'w':
-          newX = resizeStart.x + deltaX;
-          newWidth = resizeStart.width - deltaX;
-          break;
-      }
-
-      newWidth = Math.max(20, snapToGridFunc(newWidth));
-      newHeight = Math.max(20, snapToGridFunc(newHeight));
-      newX = snapToGridFunc(newX);
-      newY = snapToGridFunc(newY);
-
-      const newWidgets = widgets.map(w =>
-        w.id === selectedWidget ? { ...w, x: newX, y: newY, width: newWidth, height: newHeight } : w
-      );
-      setWidgets(newWidgets);
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    // 위젯 클릭 핸들러에서 stopPropagation을 호출하므로,
+    // 이 핸들러가 실행된다는 것은 위젯이 아닌 곳을 클릭했다는 의미입니다.
+    
+    const target = e.target as HTMLElement;
+    
+    // 리사이즈 핸들을 클릭한 경우 제외
+    if (target.classList.contains('resize-handle') || target.closest('.resize-handle')) {
+      return;
     }
+    
+    // 위젯 영역을 클릭한 경우는 위젯 클릭 핸들러가 처리 (stopPropagation으로 차단됨)
+    // 따라서 이 핸들러가 실행된다는 것은 위젯이 아닌 곳을 클릭했다는 의미
+    // 폼 선택
+    setSelectedWidget(null);
+  };
 
-    if (isDragging && selectedWidget) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const newX = snapToGridFunc(Math.max(0, mouseX - dragOffset.x));
-      const newY = snapToGridFunc(Math.max(0, mouseY - dragOffset.y));
-
-      const newWidgets = widgets.map(w =>
-        w.id === selectedWidget ? { ...w, x: newX, y: newY } : w
-      );
-      setWidgets(newWidgets);
-    }
+  // handleMouseMove와 handleMouseUp은 전역 이벤트 핸들러로 이동했습니다.
+  // 캔버스의 onMouseMove와 onMouseUp은 이제 필요 없지만,
+  // 호환성을 위해 빈 함수로 유지합니다.
+  const handleMouseMove = () => {
+    // 전역 이벤트 핸들러로 처리됨
   };
 
   const handleMouseUp = () => {
-    if (isDragging || isResizing) {
-      addToHistory(widgets);
-    }
-    setIsDragging(false);
-    setIsResizing(false);
-    setResizeHandle(null);
+    // 전역 이벤트 핸들러로 처리됨
   };
 
   const deleteWidget = () => {
@@ -367,77 +588,18 @@ print("${widget.text} clicked!")`;
     downloadFile(code, `${formTitle.replace(/\s+/g, '_')}.py`, 'text/plain');
   };
 
-  const addConsoleLog = (type: 'log' | 'error', message: string) => {
-    setConsoleOutput(prev => [...prev, { type, message }]);
-  };
-
-  const executeWidgetCode = (widget: Widget, code: string) => {
-    addConsoleLog('log', `Executing ${widget.name}...`);
-    
-    try {
-      const setWidget = (name: string, prop: string, value: any) => {
-        setWidgetProperty(name, prop, value);
-        addConsoleLog('log', `setWidget("${name}", "${prop}", ${JSON.stringify(value)})`);
-      };
-
-      const getWidget = (name: string, prop: string) => {
-        return getWidgetProperty(name, prop);
-      };
-
-      const msgBox = (message: string, title: string = 'Message', type: 'info' | 'warning' | 'error' | 'question' = 'info') => {
-        const newMsgBox: MsgBox = {
-          id: Date.now(),
-          message,
-          title,
-          type,
-        };
-        setMsgBoxQueue(prev => [...prev, newMsgBox]);
-        addConsoleLog('log', `msgBox("${message}", "${title}", "${type}")`);
-      };
-
-      const customConsole = {
-        log: (...args: any[]) => {
-          addConsoleLog('log', args.join(' '));
-        },
-        error: (...args: any[]) => {
-          addConsoleLog('error', args.join(' '));
-        }
-      };
-
-      const cleanCode = code
-        .split('\n')
-        .filter(line => !line.trim().startsWith('#'))
-        .join('\n');
-      
-      const func = new Function('setWidget', 'getWidget', 'msgBox', 'console', 'alert', cleanCode);
-      func(setWidget, getWidget, msgBox, customConsole, alert);
-    } catch (error: any) {
-      addConsoleLog('error', `Error: ${error.message}`);
-    }
-  };
-
-  const handleRunWidget = (widget: Widget) => {
-    if (widget.eventCode) {
-      executeWidgetCode(widget, widget.eventCode);
-    } else {
-      addConsoleLog('log', `${widget.text} clicked (no event code)`);
-    }
-  };
-
-  const closeMsgBox = (id: number) => {
-    setMsgBoxQueue(prev => prev.filter(m => m.id !== id));
-  };
 
   const handleTemplateClick = (template: typeof TEMPLATES[0]) => {
     const newWidgets: Widget[] = template.widgets.map((w, idx) => ({
       ...w,
       id: Date.now() + idx,
       zIndex: idx,
-      eventCode: '',
+      eventCode: getTemplateEventCode(w.name, template.name),
     }));
     setWidgets(newWidgets);
     resetHistory(newWidgets);
     setShowTemplates(false);
+    addConsoleLog('log', `템플릿 "${template.name}"이 로드되었습니다.`);
   };
 
   const handleSnippetClick = (snippet: typeof CODE_SNIPPETS[0]) => {
@@ -488,28 +650,20 @@ print("${widget.text} clicked!")`;
   const sortedWidgets = [...widgets].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
   // 실행 모드 초기화
-  const runApplication = () => {
-    const initialValues: Record<string, RuntimeValue> = {};
-    widgets.forEach(w => {
-      initialValues[w.name] = {
-        text: w.text,
-        value: w.type === 'slider' ? (w.value || 50) : w.type === 'progressbar' ? (w.value || 0) : '',
-        checked: w.checked || false,
-      };
-    });
-    setRuntimeValues(initialValues);
-    setConsoleOutput([]);
-    setMsgBoxQueue([]);
-    setIsRunning(true);
+  const runApplication = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    initializeRuntime(widgets);
   };
 
   const stopApplication = () => {
-    setIsRunning(false);
-    setRuntimeValues({});
-    setMsgBoxQueue([]);
+    stopRuntime();
   };
 
   const setWidgetProperty = (widgetName: string, property: string, value: any) => {
+    // runtimeValues 업데이트
     setRuntimeValues(prev => ({
       ...prev,
       [widgetName]: {
@@ -517,11 +671,52 @@ print("${widget.text} clicked!")`;
         [property]: value,
       }
     }));
+    
+    // 위젯의 특정 속성(items, selectedIndex 등)은 widgets 상태도 업데이트
+    if (property === 'items' || property === 'selectedIndex') {
+      setWidgets(prev => prev.map(w => {
+        if (w.name === widgetName) {
+          return { ...w, [property]: value };
+        }
+        return w;
+      }));
+    }
   };
 
   const getWidgetProperty = (widgetName: string, property: string) => {
+    // items, selectedIndex 같은 위젯 속성은 widgets에서 가져오기
+    if (property === 'items' || property === 'selectedIndex') {
+      const widget = widgets.find(w => w.name === widgetName);
+      if (widget) {
+        if (property === 'items') {
+          return widget.items || [];
+        }
+        if (property === 'selectedIndex') {
+          return widget.selectedIndex !== undefined ? widget.selectedIndex : -1;
+        }
+      }
+    }
+    
+    // 그 외는 runtimeValues에서 가져오기
     const value = runtimeValues[widgetName]?.[property];
-    return value || '';
+    return value !== undefined ? value : '';
+  };
+
+  // 코드 실행 훅 (setWidgetProperty, getWidgetProperty 정의 이후에 호출)
+  const { executeWidgetCode } = useCodeExecution({
+    widgets,
+    setWidgetProperty,
+    getWidgetProperty,
+    showMsgBox,
+    addConsoleLog,
+  });
+
+  const handleRunWidget = (widget: Widget) => {
+    if (widget.eventCode) {
+      executeWidgetCode(widget, widget.eventCode);
+    } else {
+      addConsoleLog('log', `${widget.text} clicked (no event code)`);
+    }
   };
 
   // 실행 모드 UI
@@ -742,7 +937,19 @@ print("${widget.text} clicked!")`;
         {/* 툴바 */}
         <div className="bg-gray-700 text-white px-4 py-2 flex gap-2 items-center flex-wrap">
           <button 
-            onClick={runApplication}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.nativeEvent && typeof e.nativeEvent.stopImmediatePropagation === 'function') {
+                e.nativeEvent.stopImmediatePropagation();
+              }
+              runApplication(e);
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            type="button"
             className="flex items-center gap-2 px-4 py-2 bg-green-600 rounded hover:bg-green-700 text-sm font-semibold"
           >
             <Play size={16} />
@@ -752,7 +959,12 @@ print("${widget.text} clicked!")`;
           <div className="w-px h-6 bg-gray-500"></div>
           
           <button 
-            onClick={() => setShowTemplates(true)}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowTemplates(true);
+            }}
             className="flex items-center gap-2 px-3 py-1 bg-purple-600 rounded hover:bg-purple-700 text-xs"
           >
             <FileText size={14} />
@@ -760,7 +972,12 @@ print("${widget.text} clicked!")`;
           </button>
           
           <button 
-            onClick={() => setDarkMode(!darkMode)}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDarkMode(!darkMode);
+            }}
             className="flex items-center gap-1 px-2 py-1 bg-gray-600 rounded hover:bg-gray-500 text-xs"
           >
             {darkMode ? <Sun size={14} /> : <Moon size={14} />}
@@ -769,14 +986,44 @@ print("${widget.text} clicked!")`;
           <div className="w-px h-6 bg-gray-500"></div>
           
           <button 
-            onClick={handleUndo}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setSelectedWidget(null);
+            }}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+              selectedWidget === null 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-600 hover:bg-gray-500'
+            }`}
+            title="폼 선택 (Esc)"
+          >
+            <Grip size={14} />
+            Form
+          </button>
+          
+          <div className="w-px h-6 bg-gray-500"></div>
+          
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleUndo();
+            }}
             disabled={!canUndo}
             className="flex items-center gap-1 px-2 py-1 bg-gray-600 rounded hover:bg-gray-500 disabled:opacity-30 text-xs"
           >
             <Undo size={14} />
           </button>
           <button 
-            onClick={handleRedo}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleRedo();
+            }}
             disabled={!canRedo}
             className="flex items-center gap-1 px-2 py-1 bg-gray-600 rounded hover:bg-gray-500 disabled:opacity-30 text-xs"
           >
@@ -786,7 +1033,12 @@ print("${widget.text} clicked!")`;
           <div className="w-px h-6 bg-gray-500"></div>
           
           <button 
-            onClick={() => setShowCode(!showCode)}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowCode(!showCode);
+            }}
             className="flex items-center gap-2 px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 text-xs"
           >
             <Code size={14} />
@@ -800,7 +1052,12 @@ print("${widget.text} clicked!")`;
           </label>
           
           <button 
-            onClick={saveProject}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              saveProject();
+            }}
             className="flex items-center gap-2 px-3 py-1 bg-indigo-600 rounded hover:bg-indigo-700 text-xs"
           >
             <Save size={14} />
@@ -808,7 +1065,12 @@ print("${widget.text} clicked!")`;
           </button>
           
           <button 
-            onClick={downloadCode}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              downloadCode();
+            }}
             className="flex items-center gap-2 px-3 py-1 bg-cyan-600 rounded hover:bg-cyan-700 text-xs"
           >
             <Download size={14} />
@@ -846,11 +1108,12 @@ print("${widget.text} clicked!")`;
               onDragOver={(e) => e.preventDefault()}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
-              className={`${canvasBg} relative border-2 ${borderColor} shadow-lg`}
+              onMouseDown={handleCanvasMouseDown}
+              className={`${canvasBg} relative border-2 ${selectedWidget === null ? 'ring-2 ring-blue-500' : borderColor} shadow-lg`}
               style={{ 
                 width: formSize.width, 
                 height: formSize.height,
-                cursor: isDragging ? 'grabbing' : isResizing ? 'nwse-resize' : 'default',
+                cursor: isDragging ? 'grabbing' : (isResizing || isFormResizing) ? 'nwse-resize' : 'default',
                 backgroundImage: gridEnabled ? `
                   linear-gradient(to right, ${darkMode ? '#4b5563' : '#e5e7eb'} 1px, transparent 1px),
                   linear-gradient(to bottom, ${darkMode ? '#4b5563' : '#e5e7eb'} 1px, transparent 1px)
@@ -858,10 +1121,30 @@ print("${widget.text} clicked!")`;
                 backgroundSize: gridEnabled ? `${GRID_SIZE}px ${GRID_SIZE}px` : 'auto',
               }}
             >
-              <div className="absolute top-0 left-0 right-0 bg-blue-900 text-white px-2 py-1 text-sm flex items-center gap-2">
+              <div 
+                className="absolute top-0 left-0 right-0 bg-blue-900 text-white px-2 py-1 text-sm flex items-center gap-2 cursor-pointer z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedWidget(null); // 폼 선택
+                }}
+              >
                 <Grip size={14} />
                 {formTitle}
               </div>
+
+              {/* 폼 리사이즈 핸들 */}
+              {selectedWidget === null && (
+                <>
+                  <div onMouseDown={(e) => { e.stopPropagation(); handleFormResizeStart(e, 'nw'); }} className="resize-handle absolute -top-1 -left-1 w-3 h-3 bg-blue-500 border border-white cursor-nwse-resize" style={{ zIndex: 1000 }} />
+                  <div onMouseDown={(e) => { e.stopPropagation(); handleFormResizeStart(e, 'n'); }} className="resize-handle absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border border-white cursor-ns-resize" style={{ zIndex: 1000 }} />
+                  <div onMouseDown={(e) => { e.stopPropagation(); handleFormResizeStart(e, 'ne'); }} className="resize-handle absolute -top-1 -right-1 w-3 h-3 bg-blue-500 border border-white cursor-nesw-resize" style={{ zIndex: 1000 }} />
+                  <div onMouseDown={(e) => { e.stopPropagation(); handleFormResizeStart(e, 'e'); }} className="resize-handle absolute top-1/2 -translate-y-1/2 -right-1 w-3 h-3 bg-blue-500 border border-white cursor-ew-resize" style={{ zIndex: 1000 }} />
+                  <div onMouseDown={(e) => { e.stopPropagation(); handleFormResizeStart(e, 'se'); }} className="resize-handle absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 border border-white cursor-nwse-resize" style={{ zIndex: 1000 }} />
+                  <div onMouseDown={(e) => { e.stopPropagation(); handleFormResizeStart(e, 's'); }} className="resize-handle absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border border-white cursor-ns-resize" style={{ zIndex: 1000 }} />
+                  <div onMouseDown={(e) => { e.stopPropagation(); handleFormResizeStart(e, 'sw'); }} className="resize-handle absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 border border-white cursor-nesw-resize" style={{ zIndex: 1000 }} />
+                  <div onMouseDown={(e) => { e.stopPropagation(); handleFormResizeStart(e, 'w'); }} className="resize-handle absolute top-1/2 -translate-y-1/2 -left-1 w-3 h-3 bg-blue-500 border border-white cursor-ew-resize" style={{ zIndex: 1000 }} />
+                </>
+              )}
               
               {sortedWidgets.map((widget) => (
                 <div
@@ -874,6 +1157,7 @@ print("${widget.text} clicked!")`;
                     }
                     // 위젯 컨테이너를 클릭한 경우 처리
                     // pointer-events-none이 적용된 내부 요소를 클릭해도 이벤트가 여기로 버블링됨
+                    e.stopPropagation(); // 폼 클릭 이벤트 차단
                     handleWidgetMouseDown(widget.id, e);
                   }}
                   onClick={(e) => {
@@ -882,6 +1166,9 @@ print("${widget.text} clicked!")`;
                     if (target.classList.contains('resize-handle') || target.closest('.resize-handle')) {
                       return;
                     }
+                    // 폼 클릭 이벤트 차단 - 가장 먼저 호출
+                    e.stopPropagation();
+                    e.preventDefault();
                     handleWidgetClick(widget.id, e);
                   }}
                   onDoubleClick={(e) => {
@@ -890,6 +1177,7 @@ print("${widget.text} clicked!")`;
                     if (target.classList.contains('resize-handle') || target.closest('.resize-handle')) {
                       return;
                     }
+                    e.stopPropagation(); // 폼 클릭 이벤트 차단
                     handleWidgetDoubleClick(widget.id, e);
                   }}
                   className={`absolute select-none ${
@@ -901,7 +1189,8 @@ print("${widget.text} clicked!")`;
                     width: widget.width,
                     height: widget.height,
                     cursor: 'move',
-                    zIndex: widget.zIndex || 0,
+                    zIndex: (widget.zIndex || 0) + 200, // 위젯이 폼 배경 클릭 영역 위에 오도록
+                    pointerEvents: 'auto', // 위젯 영역은 클릭 가능하도록
                   }}
                 >
                   {/* 위젯 렌더링 - pointer-events-none으로 이벤트 차단 */}
@@ -927,6 +1216,29 @@ print("${widget.text} clicked!")`;
                   )}
                 </div>
               ))}
+              
+              {/* 폼 배경 클릭 영역 - 위젯 뒤에 배치, 위젯이 없는 영역만 클릭 가능 */}
+              <div
+                className="absolute inset-0"
+                style={{ 
+                  zIndex: 0,
+                  pointerEvents: 'auto',
+                }}
+                onMouseDown={(e) => {
+                  const target = e.target as HTMLElement;
+                  
+                  // 리사이즈 핸들을 클릭한 경우 제외
+                  if (target.classList.contains('resize-handle') || target.closest('.resize-handle')) {
+                    return;
+                  }
+                  
+                  // 위젯 영역을 클릭한 경우는 위젯 클릭 핸들러가 처리 (stopPropagation으로 차단됨)
+                  // 따라서 이 핸들러가 실행된다는 것은 위젯이 아닌 곳을 클릭했다는 의미
+                  // 폼 선택
+                  e.stopPropagation(); // 캔버스 mousedown과 중복 방지
+                  setSelectedWidget(null);
+                }}
+              />
             </div>
 
             {/* 레이어 패널 */}
@@ -972,7 +1284,69 @@ print("${widget.text} clicked!")`;
       {/* 속성 패널 */}
       <div className={`w-64 ${darkMode ? 'bg-gray-800' : 'bg-gray-200'} p-4 border-l-2 overflow-y-auto ${textColor}`}>
         <h3 className="font-bold mb-4 text-sm">⚙️ Properties</h3>
-        {selectedWidgetData ? (
+        {selectedWidget === null ? (
+          // 폼 속성 편집
+          <div className="space-y-3">
+            <div className={`${darkMode ? 'bg-blue-900' : 'bg-blue-100'} px-2 py-1 rounded text-xs font-semibold`}>
+              FORM
+            </div>
+            <div>
+              <label className="text-xs font-semibold">Form Title</label>
+              <input
+                type="text"
+                value={formTitle}
+                onChange={(e) => {
+                  setFormTitle(e.target.value);
+                  addToHistory(widgets);
+                }}
+                className={`w-full px-2 py-1 border text-sm rounded ${darkMode ? 'bg-gray-700 border-gray-600' : 'bg-yellow-50'}`}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-semibold">Width</label>
+                <input
+                  type="number"
+                  value={formSize.width}
+                  onChange={(e) => {
+                    const newWidth = Math.max(200, parseInt(e.target.value) || 200);
+                    setFormSize(prev => ({ ...prev, width: newWidth }));
+                    addToHistory(widgets);
+                  }}
+                  className={`w-full px-2 py-1 border text-sm rounded ${darkMode ? 'bg-gray-700 border-gray-600' : ''}`}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold">Height</label>
+                <input
+                  type="number"
+                  value={formSize.height}
+                  onChange={(e) => {
+                    const newHeight = Math.max(150, parseInt(e.target.value) || 150);
+                    setFormSize(prev => ({ ...prev, height: newHeight }));
+                    addToHistory(widgets);
+                  }}
+                  className={`w-full px-2 py-1 border text-sm rounded ${darkMode ? 'bg-gray-700 border-gray-600' : ''}`}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold">Background Color</label>
+              <input
+                type="color"
+                value={darkMode ? '#1f2937' : '#e5e7eb'}
+                disabled
+                className="w-full h-8 border rounded cursor-not-allowed opacity-50"
+                title="폼 배경색은 다크모드 설정에 따라 자동으로 변경됩니다"
+              />
+            </div>
+            <div className="pt-2 border-t">
+              <p className="text-xs text-gray-500">
+                💡 폼을 클릭하여 선택하고, 모서리 핸들을 드래그하여 크기를 변경할 수 있습니다.
+              </p>
+            </div>
+          </div>
+        ) : selectedWidgetData ? (
           <div className="space-y-3">
             <div className={`${darkMode ? 'bg-blue-900' : 'bg-blue-100'} px-2 py-1 rounded text-xs font-semibold`}>
               {selectedWidgetData.type.toUpperCase()}
@@ -1096,6 +1470,48 @@ print("${widget.text} clicked!")`;
               >
                 <Italic size={14} className="mx-auto" />
               </button>
+            </div>
+
+            <div className="pt-2">
+              <label className="text-xs font-semibold mb-1 block">Text Align</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    handlePropertyChange('textAlign', 'left');
+                    handlePropertyBlur();
+                  }}
+                  className={`flex-1 px-2 py-1 rounded text-xs ${
+                    selectedWidgetData.textAlign === 'left' ? 'bg-blue-600 text-white' : 'bg-gray-300'
+                  }`}
+                  title="왼쪽 정렬"
+                >
+                  <AlignLeft size={14} className="mx-auto" />
+                </button>
+                <button
+                  onClick={() => {
+                    handlePropertyChange('textAlign', 'center');
+                    handlePropertyBlur();
+                  }}
+                  className={`flex-1 px-2 py-1 rounded text-xs ${
+                    selectedWidgetData.textAlign === 'center' ? 'bg-blue-600 text-white' : 'bg-gray-300'
+                  }`}
+                  title="가운데 정렬"
+                >
+                  <AlignCenter size={14} className="mx-auto" />
+                </button>
+                <button
+                  onClick={() => {
+                    handlePropertyChange('textAlign', 'right');
+                    handlePropertyBlur();
+                  }}
+                  className={`flex-1 px-2 py-1 rounded text-xs ${
+                    selectedWidgetData.textAlign === 'right' ? 'bg-blue-600 text-white' : 'bg-gray-300'
+                  }`}
+                  title="오른쪽 정렬"
+                >
+                  <AlignRight size={14} className="mx-auto" />
+                </button>
+              </div>
             </div>
 
             {(selectedWidgetData.type === 'textbox' || selectedWidgetData.type === 'textarea') && (

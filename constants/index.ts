@@ -29,31 +29,44 @@ export const TEMPLATES: Template[] = [
   {
     name: '로그인 폼',
     widgets: [
-      { type: 'label', name: 'lblTitle', x: 200, y: 50, width: 200, height: 40, text: '로그인', fontSize: 24, fontWeight: 'bold', fontStyle: 'normal', textAlign: 'left', bgColor: '#f0f0f0', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'label', name: 'lblTitle', x: 200, y: 50, width: 200, height: 40, text: '로그인', fontSize: 24, fontWeight: 'bold', fontStyle: 'normal', textAlign: 'center', bgColor: '#f0f0f0', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db' },
       { type: 'label', name: 'lblUsername', x: 150, y: 120, width: 80, height: 30, text: '아이디:', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#f0f0f0', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db' },
-      { type: 'textbox', name: 'txtUsername', x: 240, y: 120, width: 200, height: 30, text: '', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#ffffff', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db', placeholder: '', maxLength: 100 },
+      { type: 'textbox', name: 'txtUsername', x: 240, y: 120, width: 200, height: 30, text: '', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#ffffff', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db', placeholder: '아이디를 입력하세요', maxLength: 100 },
       { type: 'label', name: 'lblPassword', x: 150, y: 170, width: 80, height: 30, text: '비밀번호:', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#f0f0f0', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db' },
-      { type: 'textbox', name: 'txtPassword', x: 240, y: 170, width: 200, height: 30, text: '', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#ffffff', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db', placeholder: '', maxLength: 100 },
-      { type: 'button', name: 'btnLogin', x: 240, y: 230, width: 200, height: 40, text: '로그인', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'textbox', name: 'txtPassword', x: 240, y: 170, width: 200, height: 30, text: '', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#ffffff', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db', placeholder: '비밀번호를 입력하세요', maxLength: 100 },
+      { type: 'button', name: 'btnLogin', x: 240, y: 230, width: 200, height: 40, text: '로그인', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
     ]
   },
   {
     name: '계산기',
     widgets: [
       { type: 'textbox', name: 'txtDisplay', x: 150, y: 50, width: 300, height: 50, text: '0', fontSize: 24, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'right', bgColor: '#ffffff', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db', placeholder: '', maxLength: 100 },
-      { type: 'button', name: 'btn7', x: 150, y: 120, width: 70, height: 60, text: '7', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
-      { type: 'button', name: 'btn8', x: 230, y: 120, width: 70, height: 60, text: '8', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
-      { type: 'button', name: 'btn9', x: 310, y: 120, width: 70, height: 60, text: '9', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
-      { type: 'button', name: 'btnPlus', x: 390, y: 120, width: 60, height: 60, text: '+', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#fb923c', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn7', x: 150, y: 120, width: 70, height: 60, text: '7', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn8', x: 230, y: 120, width: 70, height: 60, text: '8', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn9', x: 310, y: 120, width: 70, height: 60, text: '9', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btnPlus', x: 390, y: 120, width: 60, height: 60, text: '+', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#fb923c', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn4', x: 150, y: 190, width: 70, height: 60, text: '4', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn5', x: 230, y: 190, width: 70, height: 60, text: '5', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn6', x: 310, y: 190, width: 70, height: 60, text: '6', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btnMinus', x: 390, y: 190, width: 60, height: 60, text: '-', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#fb923c', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn1', x: 150, y: 260, width: 70, height: 60, text: '1', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn2', x: 230, y: 260, width: 70, height: 60, text: '2', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn3', x: 310, y: 260, width: 70, height: 60, text: '3', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btnMultiply', x: 390, y: 260, width: 60, height: 60, text: '*', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#fb923c', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btn0', x: 150, y: 330, width: 150, height: 60, text: '0', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#3b82f6', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btnEquals', x: 310, y: 330, width: 70, height: 60, text: '=', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#10b981', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btnDivide', x: 390, y: 330, width: 60, height: 60, text: '/', fontSize: 18, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#fb923c', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'button', name: 'btnClear', x: 150, y: 400, width: 300, height: 40, text: 'Clear', fontSize: 14, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#ef4444', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
     ]
   },
   {
     name: 'To-Do 리스트',
     widgets: [
-      { type: 'label', name: 'lblTitle', x: 200, y: 40, width: 200, height: 35, text: 'My Tasks', fontSize: 20, fontWeight: 'bold', fontStyle: 'normal', textAlign: 'left', bgColor: '#f0f0f0', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db' },
-      { type: 'textbox', name: 'txtTask', x: 50, y: 100, width: 400, height: 35, text: '', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#ffffff', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db', placeholder: '', maxLength: 100 },
-      { type: 'button', name: 'btnAdd', x: 460, y: 100, width: 90, height: 35, text: '추가', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#10b981', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
-      { type: 'listbox', name: 'lstTasks', x: 50, y: 150, width: 500, height: 200, text: '', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#ffffff', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db', items: ['Item 1', 'Item 2', 'Item 3'] },
+      { type: 'label', name: 'lblTitle', x: 200, y: 40, width: 200, height: 35, text: 'My Tasks', fontSize: 20, fontWeight: 'bold', fontStyle: 'normal', textAlign: 'center', bgColor: '#f0f0f0', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'textbox', name: 'txtTask', x: 50, y: 100, width: 400, height: 35, text: '', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#ffffff', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db', placeholder: '할 일을 입력하세요', maxLength: 100 },
+      { type: 'button', name: 'btnAdd', x: 460, y: 100, width: 90, height: 35, text: '추가', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#10b981', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
+      { type: 'listbox', name: 'lstTasks', x: 50, y: 150, width: 500, height: 200, text: '', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', bgColor: '#ffffff', textColor: '#000000', borderWidth: 0, borderColor: '#d1d5db', items: [] },
+      { type: 'button', name: 'btnDelete', x: 50, y: 360, width: 120, height: 35, text: '삭제', fontSize: 12, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'center', bgColor: '#ef4444', textColor: '#ffffff', borderWidth: 0, borderColor: '#d1d5db' },
     ]
   }
 ];
